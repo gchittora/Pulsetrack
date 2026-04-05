@@ -1,0 +1,174 @@
+# PulseTrack Infrastructure
+# Run: docker compose up -d
+# Stop: docker compose down
+# View logs: docker compose logs -f [service-name]
+
+services:
+
+  # ──────────────────────────────────────────────
+  # PostgreSQL — for Auth data (users, projects, API keys)
+  # 
+  # WHY PostgreSQL?
+  # Auth data is relational (users HAVE projects, projects HAVE api_keys)
+  # and needs ACID guarantees (strong consistency).
+  # You can't have a user change their password and the next login
+  # still uses the old one. That's why SQL, not NoSQL.
+  # ──────────────────────────────────────────────
+  postgres:
+    image: postgres:16-alpine      # alpine = smaller image size
+    container_name: pulse_postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: pulse_admin
+      POSTGRES_PASSWORD: pulse_secret
+      POSTGRES_DB: pulsetrack
+    ports:
+      - "5433:5432"                # host port 5433 → container port 5432 (5432 taken by local PostgreSQL)
+    volumes:
+      - postgres_data:/var/lib/postgresql/data   # persist data across restarts
+
+  # ──────────────────────────────────────────────
+  # MongoDB — for Event storage
+  #
+  # WHY MongoDB?
+  # Events have flexible schema — a "page_view" event has different 
+  # fields than a "purchase" event. NoSQL handles this naturally.
+  # Also, MongoDB has high write throughput which we need for
+  # ingesting thousands of events per second.
+  # We DON'T need ACID for events — if an event count is off by 1
+  # for a second, nobody cares. (Eventual consistency is fine)
+  # ──────────────────────────────────────────────
+  mongodb:
+    image: mongo:7
+    container_name: pulse_mongodb
+    restart: unless-stopped
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: pulse_admin
+      MONGO_INITDB_ROOT_PASSWORD: pulse_secret
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+
+  # ──────────────────────────────────────────────
+  # Redis — Cache + Message Queue + Pub/Sub (3 jobs, 1 tool)
+  #
+  # WHY Redis?
+  # Redis stores data in RAM = extremely fast reads/writes.
+  # We use it for 4 different things:
+  #
+  # 1. CACHING: Dashboard queries aggregate millions of events.
+  #    Doing this every time someone opens the dashboard is slow.
+  #    Cache the result in Redis for 30 seconds.
+  #
+  # 2. MESSAGE QUEUE (Redis Streams): Ingestion service pushes events
+  #    here. Workers pull from here. This decouples them — if a
+  #    worker crashes, events are safe in Redis, not lost.
+  #
+  # 3. PUB/SUB: When a new event arrives, push it to the dashboard
+  #    via WebSocket so it updates in real-time.
+  #
+  # 4. RATE LIMITING: Track how many events each API key has sent
+  #    in the last second. If too many, reject with 429.
+  # ──────────────────────────────────────────────
+  redis:
+    image: redis:7-alpine
+    container_name: pulse_redis
+    restart: unless-stopped
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+
+  # ──────────────────────────────────────────────
+  # MinIO — S3-compatible Blob Storage (for reports)
+  #
+  # WHY MinIO instead of just saving files to disk?
+  # In production, you'd use AWS S3. MinIO is a free local clone
+  # of S3 with the EXACT same API. So your code works with both.
+  # Generated CSV/PDF reports can be 100MB+ — you don't store that
+  # in a database. You store it in blob storage and give the user
+  # a download link.
+  # ──────────────────────────────────────────────
+  minio:
+    image: minio/minio
+    container_name: pulse_minio
+    restart: unless-stopped
+    environment:
+      MINIO_ROOT_USER: pulse_admin
+      MINIO_ROOT_PASSWORD: pulse_secret_key
+    ports:
+      - "9000:9000"     # S3 API
+      - "9001:9001"     # MinIO web console (open in browser to see files)
+    volumes:
+      - minio_data:/data
+    command: server /data --console-address ":9001"
+
+  # ──────────────────────────────────────────────
+  # Auth Service — User registration, login, projects, API keys
+  #
+  # WHY build (not image)?
+  # Unlike PostgreSQL/Redis/MongoDB where we use pre-built images,
+  # the Auth Service is OUR code. We build it from our Dockerfile.
+  #
+  # WHY depends_on with condition?
+  # The auth service needs PostgreSQL to be READY (not just started).
+  # Without the health check condition, the auth service might start
+  # before PostgreSQL is accepting connections → crash on first query.
+  # ──────────────────────────────────────────────
+  auth:
+    build:
+      context: ./services/auth
+      dockerfile: Dockerfile
+    container_name: pulse_auth
+    restart: unless-stopped
+    environment:
+      PORT: 3001
+      PG_HOST: postgres              # Docker DNS: container name = hostname
+      PG_PORT: 5432                  # INTERNAL port (not the host-mapped 5433)
+      PG_USER: pulse_admin
+      PG_PASSWORD: pulse_secret
+      PG_DATABASE: pulsetrack
+      JWT_SECRET: pulsetrack-dev-secret-change-in-production
+    depends_on:
+      postgres:
+        condition: service_started
+    # No "ports" exposed to host — Nginx handles external access.
+    # The auth service is only accessible within the Docker network.
+    # This is the PRINCIPLE OF LEAST EXPOSURE — only Nginx faces the outside.
+
+  # ──────────────────────────────────────────────
+  # Nginx — Reverse Proxy & API Gateway
+  #
+  # WHY Nginx?
+  # Single entry point for ALL services. Clients hit port 80,
+  # Nginx routes to the correct internal service based on URL path:
+  #   /api/auth/*   → auth service (port 3001)
+  #   /api/events/* → ingestion service (port 3002) — Phase 2
+  #   /api/query/*  → query service (port 3003)    — Phase 4
+  #
+  # This means we can:
+  # - Scale services independently (3 ingestion instances behind one URL)
+  # - Move services to different servers without changing the client
+  # - Add rate limiting, SSL, caching at the gateway level
+  # ──────────────────────────────────────────────
+  nginx:
+    image: nginx:alpine
+    container_name: pulse_nginx
+    restart: unless-stopped
+    ports:
+      - "80:80"                      # The ONE port the outside world talks to
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro   # :ro = read-only mount
+    depends_on:
+      - auth
+
+# ──────────────────────────────────────────────
+# Named volumes — persist data even when containers restart
+# Without volumes, all data is lost when you run "docker compose down"
+# ──────────────────────────────────────────────
+volumes:
+  postgres_data:
+  mongodb_data:
+  redis_data:
+  minio_data:
