@@ -136,7 +136,10 @@ router.post('/ingest', async (req, res) => {
     const apiKey = req.headers['x-api-key'];
 
     if (!apiKey) {
-      return res.status(401).json({ error: 'X-API-Key header is required' });
+      return res.status(401).json({
+        error: 'Missing Authentication',
+        message: 'The X-API-Key header is required. Please include your project API key in the request headers.'
+      });
     }
 
     // ── Step 2: Validate API key ──
@@ -168,7 +171,10 @@ router.post('/ingest', async (req, res) => {
     const { event, properties, timestamp, user_id } = req.body;
 
     if (!event) {
-      return res.status(400).json({ error: '"event" field is required (e.g., "page_view", "click", "purchase")' });
+      return res.status(400).json({
+        error: 'Missing Event Payload',
+        message: 'The "event" field is required in the JSON body to specify the type of action (e.g., "page_view", "click").'
+      });
     }
 
     // ── Step 5: Build the event object ──

@@ -138,6 +138,73 @@ services:
     # This is the PRINCIPLE OF LEAST EXPOSURE — only Nginx faces the outside.
 
   # ──────────────────────────────────────────────
+  # Ingestion Service — High throughput event receiver
+  # 3 Replicas for horizontal scaling behind Nginx
+  # ──────────────────────────────────────────────
+  ingestion_1:
+    build:
+      context: ./services/ingestion
+      dockerfile: Dockerfile
+    container_name: pulse_ingestion_1
+    restart: unless-stopped
+    environment:
+      PORT: 3002
+      REDIS_HOST: pulse_redis
+      REDIS_PORT: 6379
+      PG_HOST: pulse_postgres
+      PG_PORT: 5432
+      PG_USER: pulse_admin
+      PG_PASSWORD: pulse_secret
+      PG_DATABASE: pulsetrack
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_started
+
+  ingestion_2:
+    build:
+      context: ./services/ingestion
+      dockerfile: Dockerfile
+    container_name: pulse_ingestion_2
+    restart: unless-stopped
+    environment:
+      PORT: 3002
+      REDIS_HOST: pulse_redis
+      REDIS_PORT: 6379
+      PG_HOST: pulse_postgres
+      PG_PORT: 5432
+      PG_USER: pulse_admin
+      PG_PASSWORD: pulse_secret
+      PG_DATABASE: pulsetrack
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_started
+
+  ingestion_3:
+    build:
+      context: ./services/ingestion
+      dockerfile: Dockerfile
+    container_name: pulse_ingestion_3
+    restart: unless-stopped
+    environment:
+      PORT: 3002
+      REDIS_HOST: pulse_redis
+      REDIS_PORT: 6379
+      PG_HOST: pulse_postgres
+      PG_PORT: 5432
+      PG_USER: pulse_admin
+      PG_PASSWORD: pulse_secret
+      PG_DATABASE: pulsetrack
+    depends_on:
+      redis:
+        condition: service_started
+      postgres:
+        condition: service_started
+
+  # ──────────────────────────────────────────────
   # Nginx — Reverse Proxy & API Gateway
   #
   # WHY Nginx?
@@ -162,6 +229,9 @@ services:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro   # :ro = read-only mount
     depends_on:
       - auth
+      - ingestion_1
+      - ingestion_2
+      - ingestion_3
 
 # ──────────────────────────────────────────────
 # Named volumes — persist data even when containers restart
