@@ -207,6 +207,25 @@ services:
   # ──────────────────────────────────────────────
   # Nginx — Reverse Proxy & API Gateway
   #
+  worker:
+    build:
+      context: ./services/worker
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    environment:
+      REDIS_HOST: pulse_redis
+      REDIS_PORT: 6379
+      MONGO_HOST: pulse_mongodb
+      MONGO_PORT: 27017
+      MONGO_DB: pulsetrack
+      MONGO_USER: pulse_admin
+      MONGO_PASSWORD: pulse_secret
+    depends_on:
+      redis:
+        condition: service_started
+      mongodb:
+        condition: service_started
+
   # WHY Nginx?
   # Single entry point for ALL services. Clients hit port 80,
   # Nginx routes to the correct internal service based on URL path:
