@@ -6,7 +6,7 @@ const Redis = require('ioredis');
 // WHY ioredis?
 // - First-class Redis Streams support (XADD, XREAD, XREADGROUP)
 // - Auto-reconnection if Redis restarts
-// - Built-in Pub/Sub support (we'll use in Phase 3)
+// - Built-in Pub/Sub support
 // - Battle-tested in production (used by Alibaba at scale)
 // 
 // WHY a single client (not a pool)?
@@ -77,8 +77,8 @@ async function disconnectRedis() {
   }
 }
 
-module.exports = { 
+module.exports = {
   get redis() { return redis; }, // getter so it's always the current instance
-  connectRedis, 
-  disconnectRedis 
+  connectRedis,
+  disconnectRedis
 };
