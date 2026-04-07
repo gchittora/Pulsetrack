@@ -10,7 +10,7 @@ const PORT = process.env.PORT || 3003;
 app.use(express.json());
 
 // Protect ALL analytics routes with the JWT middleware instantly!
-app.use('/analytics', authenticateToken, analyticsRoutes);
+app.use('/', authenticateToken, analyticsRoutes);
 
 // Simple healthcheck endpoint for Docker Compose
 app.get('/health', (req, res) => {
@@ -24,7 +24,7 @@ async function startServer() {
   await connectMongo();
 
   const server = app.listen(PORT, () => {
-    console.log(`[Query] 🚀 Service is listening on port ${PORT}`);
+    console.log(`[Query] Service is listening on port ${PORT}`);
   });
 
   // Graceful Shutdown
