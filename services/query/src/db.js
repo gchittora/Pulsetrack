@@ -12,22 +12,26 @@ async function connectMongo() {
   const mongoUser = process.env.MONGO_USER || '';
   const mongoPass = process.env.MONGO_PASSWORD || '';
 
-  const auth = mongoUser && mongoPass
-    ? `${encodeURIComponent(mongoUser)}:${encodeURIComponent(mongoPass)}@`
-    : '';
+  const auth = mongoUser && mongoPass ? `${encodeURIComponent(mongoUser)}:${encodeURIComponent(mongoPass)}@` : '';
   const uri = `mongodb://${auth}${mongoHost}:${mongoPort}/?authSource=admin`;
 
-  client = new MongoClient(uri);
-  await client.connect();
-  db = client.db(mongoDbName);
-  console.log(`[Worker] Connected to MongoDB at ${mongoHost}:${mongoPort}`);
-  return db;
+  try {
+    client = new MongoClient(uri);
+    await client.connect();
+    
+    db = client.db(mongoDbName);
+    console.log(`[Query] ✅ Connected to MongoDB at ${mongoHost}:${mongoPort}`);
+    return db;
+  } catch (err) {
+    console.error(`[Query] ❌ Failed to connect to MongoDB: ${err.message}`);
+    process.exit(1);
+  }
 }
 
 async function closeMongo() {
   if (client) {
     await client.close();
-    console.log('[Worker] MongoDB connection closed.');
+    console.log('[Query] MongoDB connection closed.');
   }
 }
 
