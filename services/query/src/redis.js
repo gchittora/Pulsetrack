@@ -7,21 +7,22 @@ const redis = new Redis({
   host: redisHost,
   port: redisPort,
   retryStrategy(times) {
-    return Math.min(times * 200, 3000);
+    if (times > 10) return null; // Stop retrying after 10 tries for API handlers
+    return Math.min(times * 100, 2000);
   }
 });
 
 redis.on('connect', () => {
-  console.log(`[Worker] Connected to Redis at ${redisHost}:${redisPort}`);
+  console.log(`[Query] ✅ Connected to Redis at ${redisHost}:${redisPort}`);
 });
 
 redis.on('error', (err) => {
-  console.error(`[Worker] Redis error: ${err.message}`);
+  console.error(`[Query] ❌ Redis connection error: ${err.message}`);
 });
 
 async function closeRedis() {
   await redis.quit();
-  console.log('[Worker] Redis connection closed.');
+  console.log('[Query] Redis connection gracefully closed.');
 }
 
 module.exports = { redis, closeRedis };
