@@ -263,6 +263,42 @@ services:
         condition: service_started
 
   # ──────────────────────────────────────────────
+  # Report Service — Async report generation (Phase 5)
+  #
+  # FLOW: POST /api/reports → BullMQ queue → Worker picks up →
+  #       Query MongoDB → Generate CSV/PDF → Upload to MinIO →
+  #       User polls GET /api/reports/:id for download URL
+  # ──────────────────────────────────────────────
+  report:
+    build:
+      context: ./services/report
+      dockerfile: Dockerfile
+    container_name: pulse_report
+    restart: unless-stopped
+    environment:
+      PORT: 3004
+      REDIS_HOST: pulse_redis
+      REDIS_PORT: 6379
+      MONGO_HOST: pulse_mongodb
+      MONGO_PORT: 27017
+      MONGO_DB: pulsetrack
+      MONGO_USER: pulse_admin
+      MONGO_PASSWORD: pulse_secret
+      MINIO_HOST: minio
+      MINIO_PORT: 9000
+      MINIO_ACCESS_KEY: pulse_admin
+      MINIO_SECRET_KEY: pulse_secret_key
+      MINIO_BUCKET: reports
+      JWT_SECRET: pulsetrack-dev-secret-change-in-production
+    depends_on:
+      redis:
+        condition: service_started
+      mongodb:
+        condition: service_started
+      minio:
+        condition: service_started
+
+  # ──────────────────────────────────────────────
   # Query Service — Fast caching analytic API (Phase 4)
   #
   query:
@@ -314,6 +350,7 @@ services:
       - ingestion_2
       - ingestion_3
       - query
+      - report
 
 # ──────────────────────────────────────────────
 # Named volumes — persist data even when containers restart
