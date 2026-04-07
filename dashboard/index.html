@@ -1,0 +1,724 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>PulseTrack Dashboard</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    :root {
+      --bg-primary: #0a0e1a;
+      --bg-secondary: #111827;
+      --bg-card: #1a2236;
+      --border: #2a3450;
+      --text-primary: #e2e8f0;
+      --text-secondary: #94a3b8;
+      --text-muted: #64748b;
+      --accent-blue: #3b82f6;
+      --accent-green: #10b981;
+      --accent-purple: #8b5cf6;
+      --accent-amber: #f59e0b;
+      --accent-red: #ef4444;
+      --glow-blue: rgba(59, 130, 246, 0.15);
+    }
+
+    body {
+      font-family: 'Inter', -apple-system, sans-serif;
+      background: var(--bg-primary);
+      color: var(--text-primary);
+      min-height: 100vh;
+    }
+
+    /* Header */
+    .header {
+      background: var(--bg-secondary);
+      border-bottom: 1px solid var(--border);
+      padding: 16px 32px;
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+    }
+
+    .header h1 {
+      font-size: 20px;
+      font-weight: 700;
+      letter-spacing: -0.5px;
+    }
+
+    .header h1 span { color: var(--accent-blue); }
+
+    .connection-status {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 13px;
+      color: var(--text-muted);
+    }
+
+    .status-dot {
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background: var(--accent-red);
+      transition: background 0.3s;
+    }
+
+    .status-dot.connected { background: var(--accent-green); box-shadow: 0 0 8px var(--accent-green); }
+
+    /* Main Layout */
+    .container {
+      max-width: 1280px;
+      margin: 0 auto;
+      padding: 24px 32px;
+    }
+
+    /* Login Section */
+    .login-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 24px;
+      margin-bottom: 24px;
+    }
+
+    .login-section h2 {
+      font-size: 16px;
+      font-weight: 600;
+      margin-bottom: 16px;
+      color: var(--text-secondary);
+    }
+
+    .login-form {
+      display: flex;
+      gap: 12px;
+      align-items: flex-end;
+      flex-wrap: wrap;
+    }
+
+    .form-group {
+      display: flex;
+      flex-direction: column;
+      gap: 4px;
+    }
+
+    .form-group label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+    }
+
+    .form-group input {
+      background: var(--bg-primary);
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      padding: 10px 14px;
+      color: var(--text-primary);
+      font-size: 14px;
+      font-family: 'Inter', sans-serif;
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-group input:focus { border-color: var(--accent-blue); }
+
+    .btn {
+      background: var(--accent-blue);
+      color: white;
+      border: none;
+      border-radius: 8px;
+      padding: 10px 20px;
+      font-size: 14px;
+      font-weight: 600;
+      cursor: pointer;
+      font-family: 'Inter', sans-serif;
+      transition: all 0.2s;
+    }
+
+    .btn:hover { background: #2563eb; transform: translateY(-1px); }
+    .btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+
+    /* Metric Cards */
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(4, 1fr);
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .metric-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      position: relative;
+      overflow: hidden;
+      transition: border-color 0.3s, transform 0.2s;
+    }
+
+    .metric-card:hover {
+      border-color: var(--accent-blue);
+      transform: translateY(-2px);
+    }
+
+    .metric-card::before {
+      content: '';
+      position: absolute;
+      top: 0;
+      left: 0;
+      right: 0;
+      height: 3px;
+      border-radius: 12px 12px 0 0;
+    }
+
+    .metric-card:nth-child(1)::before { background: var(--accent-blue); }
+    .metric-card:nth-child(2)::before { background: var(--accent-green); }
+    .metric-card:nth-child(3)::before { background: var(--accent-purple); }
+    .metric-card:nth-child(4)::before { background: var(--accent-amber); }
+
+    .metric-label {
+      font-size: 12px;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      margin-bottom: 8px;
+    }
+
+    .metric-value {
+      font-size: 32px;
+      font-weight: 700;
+      letter-spacing: -1px;
+      font-variant-numeric: tabular-nums;
+    }
+
+    .metric-card:nth-child(1) .metric-value { color: var(--accent-blue); }
+    .metric-card:nth-child(2) .metric-value { color: var(--accent-green); }
+    .metric-card:nth-child(3) .metric-value { color: var(--accent-purple); }
+    .metric-card:nth-child(4) .metric-value { color: var(--accent-amber); }
+
+    .metric-source {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 8px;
+    }
+
+    /* Charts */
+    .charts-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 16px;
+      margin-bottom: 24px;
+    }
+
+    .chart-card {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .chart-card h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 16px;
+    }
+
+    .chart-wrapper {
+      position: relative;
+      height: 250px;
+    }
+
+    /* Alert Feed */
+    .alerts-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+      margin-bottom: 24px;
+    }
+
+    .alerts-section h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+
+    .alert-badge {
+      background: var(--accent-red);
+      color: white;
+      font-size: 11px;
+      padding: 2px 8px;
+      border-radius: 10px;
+      font-weight: 600;
+    }
+
+    .alert-feed {
+      max-height: 200px;
+      overflow-y: auto;
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+    }
+
+    .alert-item {
+      background: rgba(239, 68, 68, 0.08);
+      border: 1px solid rgba(239, 68, 68, 0.2);
+      border-radius: 8px;
+      padding: 12px;
+      font-size: 13px;
+      animation: slideIn 0.3s ease;
+    }
+
+    .alert-item .alert-time {
+      font-size: 11px;
+      color: var(--text-muted);
+      margin-top: 4px;
+    }
+
+    .alert-empty {
+      color: var(--text-muted);
+      font-size: 13px;
+      font-style: italic;
+    }
+
+    /* Events Table */
+    .events-section {
+      background: var(--bg-card);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      padding: 20px;
+    }
+
+    .events-section h3 {
+      font-size: 14px;
+      font-weight: 600;
+      color: var(--text-secondary);
+      margin-bottom: 12px;
+    }
+
+    .events-table {
+      width: 100%;
+      border-collapse: collapse;
+      font-size: 13px;
+    }
+
+    .events-table th {
+      text-align: left;
+      padding: 10px 12px;
+      color: var(--text-muted);
+      font-weight: 500;
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.5px;
+      border-bottom: 1px solid var(--border);
+    }
+
+    .events-table td {
+      padding: 10px 12px;
+      border-bottom: 1px solid rgba(42, 52, 80, 0.5);
+      color: var(--text-secondary);
+    }
+
+    .events-table tr:hover td { background: rgba(59, 130, 246, 0.05); }
+
+    .event-badge {
+      display: inline-block;
+      padding: 3px 10px;
+      border-radius: 6px;
+      font-size: 12px;
+      font-weight: 500;
+    }
+
+    .event-badge.page_view { background: rgba(59, 130, 246, 0.15); color: var(--accent-blue); }
+    .event-badge.signup { background: rgba(16, 185, 129, 0.15); color: var(--accent-green); }
+    .event-badge.purchase { background: rgba(139, 92, 246, 0.15); color: var(--accent-purple); }
+    .event-badge.button_click { background: rgba(245, 158, 11, 0.15); color: var(--accent-amber); }
+
+    .hidden { display: none !important; }
+
+    @keyframes slideIn {
+      from { opacity: 0; transform: translateY(-8px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 1; }
+      50% { opacity: 0.5; }
+    }
+
+    .loading { animation: pulse 1.5s infinite; }
+
+    @media (max-width: 768px) {
+      .metrics-grid { grid-template-columns: repeat(2, 1fr); }
+      .charts-grid { grid-template-columns: 1fr; }
+      .login-form { flex-direction: column; }
+    }
+  </style>
+</head>
+<body>
+  <header class="header">
+    <h1><span>Pulse</span>Track Dashboard</h1>
+    <div class="connection-status">
+      <div class="status-dot" id="statusDot"></div>
+      <span id="statusText">Disconnected</span>
+    </div>
+  </header>
+
+  <div class="container">
+    <!-- Login -->
+    <section class="login-section" id="loginSection">
+      <h2>Authenticate to access analytics</h2>
+      <div class="login-form">
+        <div class="form-group">
+          <label>Email</label>
+          <input type="email" id="emailInput" value="garvit@test.com" />
+        </div>
+        <div class="form-group">
+          <label>Password</label>
+          <input type="password" id="passwordInput" value="test1234" />
+        </div>
+        <button class="btn" id="loginBtn" onclick="login()">Connect</button>
+      </div>
+      <p id="loginError" style="color: var(--accent-red); font-size: 13px; margin-top: 8px;"></p>
+    </section>
+
+    <!-- Dashboard (hidden until login) -->
+    <div id="dashboard" class="hidden">
+      <!-- Metric Cards -->
+      <div class="metrics-grid">
+        <div class="metric-card">
+          <div class="metric-label">Total Events</div>
+          <div class="metric-value" id="totalEvents">--</div>
+          <div class="metric-source" id="totalSource"></div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Unique Users</div>
+          <div class="metric-value" id="uniqueUsers">--</div>
+          <div class="metric-source">HyperLogLog estimate</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Events Today</div>
+          <div class="metric-value" id="eventsToday">--</div>
+          <div class="metric-source">Daily counter</div>
+        </div>
+        <div class="metric-card">
+          <div class="metric-label">Event Types</div>
+          <div class="metric-value" id="eventTypes">--</div>
+          <div class="metric-source">Distinct categories</div>
+        </div>
+      </div>
+
+      <!-- Charts -->
+      <div class="charts-grid">
+        <div class="chart-card">
+          <h3>Event Breakdown</h3>
+          <div class="chart-wrapper">
+            <canvas id="breakdownChart"></canvas>
+          </div>
+        </div>
+        <div class="chart-card">
+          <h3>Live Event Counter</h3>
+          <div class="chart-wrapper">
+            <canvas id="liveChart"></canvas>
+          </div>
+        </div>
+      </div>
+
+      <!-- Alerts -->
+      <section class="alerts-section">
+        <h3>Live Alerts <span class="alert-badge" id="alertCount">0</span></h3>
+        <div class="alert-feed" id="alertFeed">
+          <div class="alert-empty">No alerts yet. Spike detection is active (threshold: 500 events/min)</div>
+        </div>
+      </section>
+
+      <!-- Recent Events -->
+      <section class="events-section">
+        <h3>Recent Events (last 20)</h3>
+        <table class="events-table">
+          <thead>
+            <tr>
+              <th>Event</th>
+              <th>User</th>
+              <th>Properties</th>
+              <th>Time</th>
+            </tr>
+          </thead>
+          <tbody id="eventsBody">
+            <tr><td colspan="4" style="color: var(--text-muted);">Loading...</td></tr>
+          </tbody>
+        </table>
+      </section>
+    </div>
+  </div>
+
+  <script>
+    let token = null;
+    let socket = null;
+    let breakdownChart = null;
+    let liveChart = null;
+    let liveData = [];
+    let alertCount = 0;
+    const API_BASE = '';
+
+    // ── Login ──
+    async function login() {
+      const email = document.getElementById('emailInput').value;
+      const password = document.getElementById('passwordInput').value;
+      const btn = document.getElementById('loginBtn');
+      const error = document.getElementById('loginError');
+
+      btn.disabled = true;
+      btn.textContent = 'Connecting...';
+      error.textContent = '';
+
+      try {
+        const res = await fetch(`${API_BASE}/api/auth/login`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email, password })
+        });
+
+        const data = await res.json();
+        if (!res.ok) throw new Error(data.message || 'Login failed');
+
+        token = data.token;
+        document.getElementById('loginSection').classList.add('hidden');
+        document.getElementById('dashboard').classList.remove('hidden');
+
+        connectWebSocket();
+        fetchAllData();
+
+        // Auto-refresh every 5 seconds
+        setInterval(fetchAllData, 5000);
+      } catch (err) {
+        error.textContent = err.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = 'Connect';
+      }
+    }
+
+    // ── WebSocket ──
+    function connectWebSocket() {
+      socket = io(window.location.origin, {
+        path: '/api/query/socket.io'
+      });
+
+      socket.on('connect', () => {
+        document.getElementById('statusDot').classList.add('connected');
+        document.getElementById('statusText').textContent = 'Live';
+      });
+
+      socket.on('disconnect', () => {
+        document.getElementById('statusDot').classList.remove('connected');
+        document.getElementById('statusText').textContent = 'Reconnecting...';
+      });
+
+      socket.on('stats', (data) => {
+        updateMetrics(data);
+        updateLiveChart(data.total_events);
+      });
+
+      socket.on('alert', (data) => {
+        addAlert(data);
+      });
+    }
+
+    // ── Fetch Data ──
+    async function fetchAllData() {
+      if (!token) return;
+
+      try {
+        // Realtime stats from Redis counters
+        const statsRes = await fetch(`${API_BASE}/api/query/stats/realtime?project_id=1`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (statsRes.ok) {
+          const stats = await statsRes.json();
+          updateMetrics(stats);
+          updateBreakdownChart(stats.by_type);
+        }
+
+        // Recent events
+        const eventsRes = await fetch(`${API_BASE}/api/query/events/list`, {
+          headers: { 'Authorization': `Bearer ${token}` }
+        });
+        if (eventsRes.ok) {
+          const eventsData = await eventsRes.json();
+          updateEventsTable(eventsData.events || []);
+        }
+      } catch (err) {
+        console.error('Fetch error:', err);
+      }
+    }
+
+    // ── Update Metrics ──
+    function updateMetrics(data) {
+      animateValue('totalEvents', data.total_events || 0);
+      animateValue('uniqueUsers', data.unique_users || 0);
+      animateValue('eventsToday', data.events_today || 0);
+
+      if (data.by_type) {
+        const types = Object.values(data.by_type).filter(v => v > 0).length;
+        animateValue('eventTypes', types);
+      }
+
+      const src = document.getElementById('totalSource');
+      if (data._source) src.textContent = `Source: ${data._source}`;
+    }
+
+    function animateValue(id, newVal) {
+      const el = document.getElementById(id);
+      const current = parseInt(el.textContent) || 0;
+      if (current === newVal) return;
+      el.textContent = newVal.toLocaleString();
+    }
+
+    // ── Breakdown Chart (Doughnut) ──
+    function updateBreakdownChart(byType) {
+      const labels = Object.keys(byType).filter(k => byType[k] > 0);
+      const values = labels.map(k => byType[k]);
+      const colors = {
+        page_view: '#3b82f6',
+        signup: '#10b981',
+        purchase: '#8b5cf6',
+        button_click: '#f59e0b'
+      };
+
+      if (!breakdownChart) {
+        const ctx = document.getElementById('breakdownChart').getContext('2d');
+        breakdownChart = new Chart(ctx, {
+          type: 'doughnut',
+          data: {
+            labels: labels,
+            datasets: [{
+              data: values,
+              backgroundColor: labels.map(l => colors[l] || '#64748b'),
+              borderWidth: 0,
+              hoverOffset: 8
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            cutout: '65%',
+            plugins: {
+              legend: {
+                position: 'bottom',
+                labels: { color: '#94a3b8', padding: 16, font: { family: 'Inter', size: 12 } }
+              }
+            }
+          }
+        });
+      } else {
+        breakdownChart.data.labels = labels;
+        breakdownChart.data.datasets[0].data = values;
+        breakdownChart.data.datasets[0].backgroundColor = labels.map(l => colors[l] || '#64748b');
+        breakdownChart.update('none');
+      }
+    }
+
+    // ── Live Chart (Line) ──
+    function updateLiveChart(total) {
+      const now = new Date().toLocaleTimeString();
+      liveData.push({ time: now, value: total });
+      if (liveData.length > 20) liveData.shift();
+
+      if (!liveChart) {
+        const ctx = document.getElementById('liveChart').getContext('2d');
+        liveChart = new Chart(ctx, {
+          type: 'line',
+          data: {
+            labels: liveData.map(d => d.time),
+            datasets: [{
+              label: 'Total Events',
+              data: liveData.map(d => d.value),
+              borderColor: '#3b82f6',
+              backgroundColor: 'rgba(59, 130, 246, 0.1)',
+              fill: true,
+              tension: 0.4,
+              pointRadius: 3,
+              pointBackgroundColor: '#3b82f6',
+              borderWidth: 2
+            }]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            scales: {
+              x: {
+                ticks: { color: '#64748b', font: { size: 10 }, maxRotation: 45 },
+                grid: { color: 'rgba(42, 52, 80, 0.5)' }
+              },
+              y: {
+                ticks: { color: '#64748b', font: { size: 11 } },
+                grid: { color: 'rgba(42, 52, 80, 0.5)' }
+              }
+            },
+            plugins: {
+              legend: { display: false }
+            }
+          }
+        });
+      } else {
+        liveChart.data.labels = liveData.map(d => d.time);
+        liveChart.data.datasets[0].data = liveData.map(d => d.value);
+        liveChart.update('none');
+      }
+    }
+
+    // ── Alerts ──
+    function addAlert(alert) {
+      alertCount++;
+      document.getElementById('alertCount').textContent = alertCount;
+
+      const feed = document.getElementById('alertFeed');
+      const empty = feed.querySelector('.alert-empty');
+      if (empty) empty.remove();
+
+      const item = document.createElement('div');
+      item.className = 'alert-item';
+      item.innerHTML = `
+        <strong>${alert.type}</strong>: ${alert.message}
+        <div class="alert-time">${new Date(alert.timestamp).toLocaleString()}</div>
+      `;
+      feed.prepend(item);
+
+      // Keep only last 20 alerts
+      while (feed.children.length > 20) feed.lastChild.remove();
+    }
+
+    // ── Events Table ──
+    function updateEventsTable(events) {
+      const tbody = document.getElementById('eventsBody');
+      if (!events.length) {
+        tbody.innerHTML = '<tr><td colspan="4" style="color: var(--text-muted);">No events yet</td></tr>';
+        return;
+      }
+
+      tbody.innerHTML = events.slice(0, 20).map(e => {
+        const eventName = e.event || 'unknown';
+        const time = new Date(e.timestamp).toLocaleString();
+        const props = e.properties ? JSON.stringify(e.properties) : '-';
+        return `<tr>
+          <td><span class="event-badge ${eventName}">${eventName}</span></td>
+          <td>${e.user_id || '-'}</td>
+          <td style="font-family: monospace; font-size: 12px;">${props}</td>
+          <td style="white-space: nowrap;">${time}</td>
+        </tr>`;
+      }).join('');
+    }
+  </script>
+</body>
+</html>
