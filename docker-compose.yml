@@ -307,11 +307,13 @@ services:
       - "80:80"                      # The ONE port the outside world talks to
     volumes:
       - ./nginx/nginx.conf:/etc/nginx/nginx.conf:ro   # :ro = read-only mount
+      - ./dashboard:/usr/share/nginx/html:ro           # Dashboard UI
     depends_on:
       - auth
       - ingestion_1
       - ingestion_2
       - ingestion_3
+      - query
 
 # ──────────────────────────────────────────────
 # Named volumes — persist data even when containers restart
