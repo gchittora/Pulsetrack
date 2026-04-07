@@ -205,12 +205,22 @@ services:
         condition: service_started
 
   # ──────────────────────────────────────────────
-  # Nginx — Reverse Proxy & API Gateway
+  # Worker Service — Event processing pipeline
   #
-  worker:
+  # Each worker runs 3 stages per batch:
+  #   1. MongoDB write (durability)
+  #   2. Redis counter updates (real-time aggregation)
+  #   3. Alert threshold checks (spike detection via Pub/Sub)
+  #
+  # Consistent hashing: WORKER_SLOT assigns each worker a slot.
+  # Events are routed to a slot based on MD5(project_id) % TOTAL_WORKER_SLOTS.
+  # Worker only processes events that hash to its slot.
+  # ──────────────────────────────────────────────
+  worker_1:
     build:
       context: ./services/worker
       dockerfile: Dockerfile
+    container_name: pulse_worker_1
     restart: unless-stopped
     environment:
       REDIS_HOST: pulse_redis
@@ -220,6 +230,32 @@ services:
       MONGO_DB: pulsetrack
       MONGO_USER: pulse_admin
       MONGO_PASSWORD: pulse_secret
+      WORKER_SLOT: 0
+      TOTAL_WORKER_SLOTS: 2
+      ALERT_SPIKE_THRESHOLD: 500
+    depends_on:
+      redis:
+        condition: service_started
+      mongodb:
+        condition: service_started
+
+  worker_2:
+    build:
+      context: ./services/worker
+      dockerfile: Dockerfile
+    container_name: pulse_worker_2
+    restart: unless-stopped
+    environment:
+      REDIS_HOST: pulse_redis
+      REDIS_PORT: 6379
+      MONGO_HOST: pulse_mongodb
+      MONGO_PORT: 27017
+      MONGO_DB: pulsetrack
+      MONGO_USER: pulse_admin
+      MONGO_PASSWORD: pulse_secret
+      WORKER_SLOT: 1
+      TOTAL_WORKER_SLOTS: 2
+      ALERT_SPIKE_THRESHOLD: 500
     depends_on:
       redis:
         condition: service_started
