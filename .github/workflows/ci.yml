@@ -29,9 +29,9 @@ jobs:
       - name: 🩺 Verify Health Checks
         run: |
           echo "Checking Auth Service Database connectivity..."
-          # Poll until we get a 200 OK from Auth health check directly on its mapped port
+          # Poll until we get a 200 OK from Auth health check from INSIDE the docker network
           for i in {1..15}; do
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost:3001/health || true)
+            STATUS=$(docker compose exec nginx curl -s -o /dev/null -w "%{http_code}" http://auth:3001/health || true)
             if [ "$STATUS" = "200" ]; then
               echo "✅ Database initialized & Auth Service is UP!"
               exit 0
