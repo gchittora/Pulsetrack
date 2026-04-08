@@ -34,6 +34,9 @@ jobs:
             STATUS=$(docker compose exec nginx curl -s -o /dev/null -w "%{http_code}" http://auth:3001/health || true)
             if [ "$STATUS" = "200" ]; then
               echo "✅ Database initialized & Auth Service is UP!"
+              echo "🔄 Reloading Nginx to flush stale upstream caches..."
+              docker compose exec nginx nginx -s reload
+              sleep 2
               exit 0
             fi
             echo "Waiting for DB to boot and service to start... ($i/15)"
