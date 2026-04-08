@@ -42,9 +42,13 @@ const PORT = process.env.PORT || 3001;
 async function start() {
   try {
     await initializeDatabase();
-    app.listen(PORT, () => {
-      console.log(`Auth service running on port ${PORT}`);
-    });
+    
+    // Only listen on port if not running in a test environment
+    if (process.env.NODE_ENV !== 'test') {
+      app.listen(PORT, () => {
+        console.log(`Auth service running on port ${PORT}`);
+      });
+    }
   } catch (error) {
     console.error('Failed to start auth service:', error.message);
     process.exit(1);
@@ -52,3 +56,5 @@ async function start() {
 }
 
 start();
+
+module.exports = app;

@@ -231,7 +231,7 @@ services:
       MONGO_USER: pulse_admin
       MONGO_PASSWORD: pulse_secret
       WORKER_SLOT: 0
-      TOTAL_WORKER_SLOTS: 2
+      TOTAL_WORKER_SLOTS: 3
       ALERT_SPIKE_THRESHOLD: 500
     depends_on:
       redis:
@@ -254,7 +254,30 @@ services:
       MONGO_USER: pulse_admin
       MONGO_PASSWORD: pulse_secret
       WORKER_SLOT: 1
-      TOTAL_WORKER_SLOTS: 2
+      TOTAL_WORKER_SLOTS: 3
+      ALERT_SPIKE_THRESHOLD: 500
+    depends_on:
+      redis:
+        condition: service_started
+      mongodb:
+        condition: service_started
+
+  worker_3:
+    build:
+      context: ./services/worker
+      dockerfile: Dockerfile
+    container_name: pulse_worker_3
+    restart: unless-stopped
+    environment:
+      REDIS_HOST: pulse_redis
+      REDIS_PORT: 6379
+      MONGO_HOST: pulse_mongodb
+      MONGO_PORT: 27017
+      MONGO_DB: pulsetrack
+      MONGO_USER: pulse_admin
+      MONGO_PASSWORD: pulse_secret
+      WORKER_SLOT: 2
+      TOTAL_WORKER_SLOTS: 3
       ALERT_SPIKE_THRESHOLD: 500
     depends_on:
       redis:

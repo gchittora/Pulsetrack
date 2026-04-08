@@ -7,7 +7,7 @@ const crypto = require('crypto');
 const STREAM_KEY = 'events:raw';
 const GROUP_NAME = 'pulse_workers';
 const CONSUMER_NAME = `worker-${crypto.randomBytes(4).toString('hex')}`;
-const BATCH_SIZE = parseInt(process.env.BATCH_SIZE || '50', 10);
+const BATCH_SIZE = parseInt(process.env.BATCH_SIZE || '500', 10);
 const BLOCK_MS = 5000;
 
 // ------------------------------------------------------------------

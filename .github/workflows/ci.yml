@@ -1,0 +1,114 @@
+name: PulseTrack CI/CD Pipeline
+
+on:
+  push:
+    branches: [ "main" ]
+  pull_request:
+    branches: [ "main" ]
+
+jobs:
+  test:
+    name: Run Unit & E2E Tests
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: ⚙️ Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+
+      - name: 🚀 Start Infrastructure
+        run: |
+          docker compose up -d --build
+          echo "Waiting for services to boot..."
+          sleep 15
+          
+      - name: 🩺 Verify Health Checks
+        run: |
+          echo "Checking Nginx routing..."
+          # Poll until we get a 200 OK from Auth health check via Nginx
+          for i in {1..10}; do
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" http://localhost/api/auth/health || true)
+            if [ "$STATUS" = "200" ]; then
+              echo "✅ Nginx & Auth Service are UP!"
+              exit 0
+            fi
+            echo "Waiting for proxy to be ready... ($i/10)"
+            sleep 3
+          done
+          echo "❌ Services failed to become healthy!"
+          docker compose logs nginx
+          docker compose logs auth
+          exit 1
+
+      - name: 🧪 Install Dependencies & Run Unit Tests
+        run: |
+          # The Auth Service contains our rigorous unit test suite
+          cd services/auth
+          npm install
+          npm run test
+
+      - name: 🌐 Run End-to-End Test Suite
+        run: |
+          # Ensure root dependencies are installed if any
+          npm install node-fetch || true
+          
+          # Execute our E2E flow against the running Docker stack
+          node tests/e2e/flow.test.js
+
+  deploy:
+    name: Build & Push to Docker Hub
+    needs: test
+    runs-on: ubuntu-latest
+    # Only deploy on pushes to main, never on PRs
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    
+    steps:
+      - name: 📥 Checkout Code
+        uses: actions/checkout@v4
+
+      - name: 🐳 Log in to Docker Hub
+        uses: docker/login-action@v3
+        with:
+          # These secrets must be added to your GitHub Repository Settings!
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: 📦 Build and Push Auth Service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/auth
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/pulse-auth:latest
+
+      - name: 📦 Build and Push Ingestion Service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/ingestion
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/pulse-ingestion:latest
+
+      - name: 📦 Build and Push Query Service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/query
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/pulse-query:latest
+
+      - name: 📦 Build and Push Report Service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/report
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/pulse-report:latest
+
+      - name: 📦 Build and Push Worker Service
+        uses: docker/build-push-action@v5
+        with:
+          context: ./services/worker
+          push: true
+          tags: ${{ secrets.DOCKERHUB_USERNAME }}/pulse-worker:latest
